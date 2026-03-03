@@ -1,0 +1,643 @@
+---
+title: "N funcgene code"
+author: "Shuhan_Zhang"
+date: "2026-03-03"
+output: html_document
+---
+##1.map
+```{r setup, include=FALSE}
+setwd("D:/Other-project/N/New_1439/map")
+library(tidyverse)
+library(sf)
+library(ggplot2)
+library(ggspatial)
+library(dplyr)
+#install.packages("ggspatial")
+#install.packages("cowplot")
+#install.packages("sf")
+#setwd("/node2/ps/eukaryote/nematode/eastforest")
+china_shp <- "chinamap.geojson"
+nine <- "jiuduanxian.map.geojson"
+china <- sf::read_sf(china_shp)
+nine_line <- sf::read_sf(nine)
+library(ggspatial)
+ggplot() + 
+  geom_sf(data = china,fill="NA",size=1,color="black") + 
+  geom_sf(data = nine_line) + 
+  coord_sf(crs = "+proj=laea +lat_0=40 +lon_0=104")+
+  annotation_scale(location = "bl") +
+  # spatial-aware automagic north arrow
+  annotation_north_arrow(location = "tl", which_north = "false",
+                         style = north_arrow_fancy_orienteering)
+
+df=read.csv("env_china_update_1439.csv",row.names = 1)
+# df<-mutate(df,Biome=paste(climate,ecosystem,sep=" "))
+# df<-filter(df,ecosystem != "paddy field")
+scatter_df_tro <- sf::st_as_sf(df,coords = c("lons", "lats"),crs = 4326)
+unique(df$Biome)
+unique(df$site)
+library(cowplot)
+
+ggplot() + 
+  geom_sf(data = china,fill=NA) + 
+  geom_sf(data = nine_line,color='gray50',size=.8)+
+  geom_sf(data = scatter_df_tro,size=2,aes(colour=Biome,shape=Biome))+
+  scale_colour_manual(values=c("#A0522D","#CD853F","#D2691E","#FFA500","#F4A460",
+                               "#FFD700",
+                               "#8b950e","#a4b626","#60b90d","#2d740c","#13510b",
+                               "#2ba0a2","#1a8182","#096162",
+                               "#bf6e95",
+                               "red"),
+                  limits=c("Alpine cropland","Continental  cropland","Dry  cropland","Temperate  cropland","Tropical  cropland",
+                           "Dry  desert",
+                          "Alpine forest","Continental  forest","Dry  forest","Temperate  forest","Tropical  forest",
+                           "Alpine grassland","Continental  grassland","Dry  grassland",
+                          "Dry  shrubland",
+                          "nm"))+
+  
+  scale_shape_manual(values=c(17,25,15,8,12,
+                              15,
+                              17,25,15,8,12,
+                              17,25,15,
+                              15,
+                              16),
+                     limits=c("Alpine cropland","Continental  cropland","Dry  cropland","Temperate  cropland","Tropical  cropland",
+                           "Dry  desert",
+                          "Alpine forest","Continental  forest","Dry  forest","Temperate  forest","Tropical  forest",
+                           "Alpine grassland","Continental  grassland","Dry  grassland",
+                          "Dry  shrubland",
+                          "nm"))+
+  
+  coord_sf(crs="+proj=laea +lat_0=40 +lon_0=100")+
+  annotation_scale(location = "bl",text_face = "bold") +
+  # spatial-aware automagic north arrow
+  annotation_north_arrow(location = "tl", which_north = "false",
+                         style = north_arrow_fancy_orienteering)+
+  #定制化图例：这一步可以设计出亮眼的图例哦
+  theme(
+    text = element_text(size = 20,face = "bold"),
+    panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(colour = "grey80",size=.2),
+    legend.key = element_rect(fill = "white"),
+    legend.position = "right",
+    legend.text=element_text(size=15)
+    
+  )
+```
+##2. relative balance
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+setwd("D:/Other-project/N/New_1439/1.2 相对平衡/richness")
+abundance<-read.csv("richness_scale_ph.csv",header=T,row.names=1)
+env<-read.csv("env_china_update_1439.csv",header=T,row.names=1)
+ab_env<-merge(abundance,env,by = "row.names")
+df_2=ab_env[ab_env$depth=="20",]
+df_5=ab_env[ab_env$depth=="50",]
+df_10=ab_env[ab_env$depth=="100",]
+df_env<-df_2
+y<-cbind(df_env$Denitrification,df_env$Dissimilatory.nitrate.reduction,df_env$Nitrification,df_env$Assimilatory.nitrate.reduction,df_env$Organic.degradation.and.synthes,df_env$Nitrogen.fixation)
+colnames(y)<-c("Denitrification","Dissimilatory.nitrate.reduction","Nitrification","Assimilatory.nitrate.reduction","Organic.degradation.and.synthesis","Nitrogen.fixation")
+result <- aggregate(y ~ site, data = df_env, FUN = mean)
+
+df_long <- result %>%
+  pivot_longer(cols = -site, names_to = "Process", values_to = "Value")
+df_proportions_2 <- df_long %>%
+  group_by(site) %>%
+  mutate(Proportion = Value / sum(Value)) %>%
+  ungroup()
+
+# 计算 'Organic.degradation.and.synthesis' 的总比例，用于排序
+df_proportions_2$site <- factor(df_proportions_2$site,
+                               levels = df_proportions_2%>%
+                                 filter(Process == "Organic.degradation.and.synthesis") %>%
+                                 arrange(desc(Proportion)) %>%
+                                 pull(site))
+# 绘图
+p<-ggplot(df_proportions_2, aes(x = site, y = Proportion, fill = Process)) +
+    geom_bar(stat = "identity") +  # 使用堆积柱状图
+    labs(x = "site", y = "Proportion", title = "Proportions of Nitrogen Processes by site") +
+    scale_fill_manual(values = c("Denitrification" = "#FDB462",
+                                 "Dissimilatory.nitrate.reduction" = "#4DAF4A",
+                                 "Nitrification" = "#66C2A5",
+                                 "Assimilatory.nitrate.reduction" = "#FB8072",
+                                 "Organic.degradation.and.synthesis" = "#9e9ac8",
+                                 "Nitrogen.fixation" = "#377EB8")) +  # 固定颜色
+    theme_bw() +
+    theme(
+        axis.text = element_text(colour = 'black', size = 9, angle = 90, hjust = 1),
+        panel.grid.major = element_blank(),  # 移除主网格线
+        panel.grid.minor = element_blank()   # 移除次网格线
+    )
+p
+
+
+##按照0-20的进行排序
+# 计算 Biome 的频数
+scale_2 <- as.data.frame(table(df_proportions_2$Biome))
+write.csv(scale_2,"scale_10.csv")
+# scale_10<-read.csv("scale_10.csv")
+
+# 将 Biome 列重新设置为因子，并按照 scale 中的顺序进行排序
+df_env<-df_5
+y<-cbind(df_env$Denitrification,df_env$Dissimilatory.nitrate.reduction,df_env$Nitrification,df_env$Assimilatory.nitrate.reduction,df_env$Organic.degradation.and.synthes,df_env$Nitrogen.fixation)
+colnames(y)<-c("Denitrification","Dissimilatory.nitrate.reduction","Nitrification","Assimilatory.nitrate.reduction","Organic.degradation.and.synthesis","Nitrogen.fixation")
+result_5 <- aggregate(y ~ Biome, data = df_env, FUN = mean)
+
+df_long_5 <- result_5 %>%
+  pivot_longer(cols = -Biome, names_to = "Process", values_to = "Value")
+
+df_proportions_5 <- df_long_5 %>%
+  group_by(Biome) %>%
+  mutate(Proportion = Value / sum(Value)) %>%
+  ungroup()
+scale_5<- as.data.frame(table(df_proportions_5$Biome))
+scale_5$Var1 <- sub("Tropical  forest", "Alpine forest", scale_2$Var1)
+df_proportions_5$Biome <- factor(df_proportions_5$Biome, levels = scale_5$Var1)
+
+# 绘图
+ggplot(df_proportions_5, aes(x = Biome, y = Proportion, fill = Process)) +
+    geom_bar(stat = "identity") +  # 使用堆积柱状图
+    labs(x = "Biome", y = "Proportion", title = "Proportions of Nitrogen Processes by Biome") +
+    scale_fill_manual(values = c("Denitrification" = "#FDB462", 
+                                 "Dissimilatory.nitrate.reduction" = "#4DAF4A", 
+                                 "Nitrification" = "#66C2A5", 
+                                 "Assimilatory.nitrate.reduction" = "#FB8072", 
+                                 "Organic.degradation.and.synthesis" = "#9e9ac8", 
+                                 "Nitrogen.fixation" = "#377EB8")) +  # 固定颜色
+    theme_bw() +
+    theme(
+        axis.text = element_text(colour = 'black', size = 9, angle = 90, hjust = 1),
+        panel.grid.major = element_blank(),  # 移除主网格线
+        panel.grid.minor = element_blank()   # 移除次网格线
+    )
+
+###10
+df_env<-df_10
+y<-cbind(df_env$Denitrification,df_env$Dissimilatory.nitrate.reduction,df_env$Nitrification,df_env$Assimilatory.nitrate.reduction,df_env$Organic.degradation.and.synthes,df_env$Nitrogen.fixation)
+colnames(y)<-c("Denitrification","Dissimilatory.nitrate.reduction","Nitrification","Assimilatory.nitrate.reduction","Organic.degradation.and.synthesis","Nitrogen.fixation")
+result_10 <- aggregate(y ~ Biome, data = df_env, FUN = mean)
+
+df_long_10 <- result_10 %>%
+  pivot_longer(cols = -Biome, names_to = "Process", values_to = "Value")
+
+df_proportions_10 <- df_long_10 %>%
+  group_by(Biome) %>%
+  mutate(Proportion = Value / sum(Value)) %>%
+  ungroup()
+
+scale_10<-read.csv("scale_10.csv",row.names = 1)
+df_proportions_10$Biome <- factor(df_proportions_10$Biome, levels = scale_10$Var1)
+
+# 绘图
+ggplot(df_proportions_10, aes(x = Biome, y = Proportion, fill = Process)) +
+    geom_bar(stat = "identity") +  # 使用堆积柱状图
+    labs(x = "Biome", y = "Proportion", title = "Proportions of Nitrogen Processes by Biome") +
+    scale_fill_manual(values = c("Denitrification" = "#FDB462", 
+                                 "Dissimilatory.nitrate.reduction" = "#4DAF4A", 
+                                 "Nitrification" = "#66C2A5", 
+                                 "Assimilatory.nitrate.reduction" = "#FB8072", 
+                                 "Organic.degradation.and.synthesis" = "#9e9ac8", 
+                                 "Nitrogen.fixation" = "#377EB8")) +  # 固定颜色
+    theme_bw() +
+    theme(
+        axis.text = element_text(colour = 'black', size = 9, angle = 90, hjust = 1),
+        panel.grid.major = element_blank(),  # 移除主网格线
+        panel.grid.minor = element_blank()   # 移除次网格线
+    )
+```
+##3.SEM
+```{r}
+library(MASS) # install.packages("MASS") 
+library(lavaan)
+library(lavaan.survey) #
+library(AICcmodavg) 
+library(car)
+library(piecewiseSEM) #
+library(tidyverse)
+library(nlme)
+library(lme4)
+library(brms)
+library(ape)
+library(caper) #
+library(emmeans)
+library(readxl)
+library(tidytree) #
+library(blavaan) #
+library(rstan)
+library(rstantools)
+library(future) 
+library(loo)
+library(bayesplot)
+library(dplyr) # Data manipulation
+library(lubridate) # Data manipulation
+library(iNEXT) # Calculation of richness estimators #
+library(MuMIn) # Model selection
+library(matrixStats) # Calculation of weighted median
+library(RColorBrewer)
+library(arm)
+library(ade4)
+library(semPlot)
+  
+setwd("D:/Other-project/N/New_1439/12.SEM")
+df<-read.csv("all_sem.csv",header=T,row.names = 1)
+# 读取您的数据
+ # 标准化数据
+env_20<-df[df$depth=="20",]
+env_20[env_20 == "#N/A"] <- NA
+env_20_clean <- na.omit(env_20)
+env_20_clean$Multifunction<-as.numeric(env_20_clean$Multifunction)
+ #data_scaled <- as.data.frame(scale(env_p4_20_clean))
+ 
+ # 检查和清理数据
+ # 这里您需要根据您的数据特性进行适当的数据清理
+ 
+ # 模型定义
+ #0-20cm
+ model1 <- '
+  Multifunction ~ relative.abundance4+relative.abundance2+pcoa1_2+NDVI+AN+MAT+clay 
+  richness4 ~ NDVI+pH+AN+clay+MAT
+  pcoa1_4 ~ pH+clay+MAT
+  relative.abundance4 ~ pH+AN+clay+MAT
+  richness2  ~ NDVI+pH+MAT
+  pcoa1_2 ~ pH+AN+clay+MAT
+  relative.abundance2 ~ NDVI+MAT
+  NDVI ~ MAT+pH+AN
+  clay ~ MAT
+  pH ~ MAT
+  AN ~ MAT
+  richness4 ~~ pcoa1_4+relative.abundance4
+  richness2 ~~ pcoa1_2+relative.abundance2
+  relative.abundance4 ~~ relative.abundance2
+   pcoa1_4 ~~             pcoa1_2
+   richness4 ~~           richness2
+   clay ~~                  pH
+    pH ~~                  AN
+    richness4 ~~             pcoa1_2
+    pcoa1_4 ~~ relative.abundance2
+    relative.abundance4 ~~             pcoa1_2
+    richness4 ~~ relative.abundance2
+    relative.abundance4 ~~           richness2
+ '
+ fit <- sem(model1, data = env_20_clean)
+
+ ## 使用SEM函数拟合模型
+ summary(fit)
+  #寻找遗漏的链接
+ mod_indices<-modindices(fit)
+ mod_indices[mod_indices$mi > 3.841, ]
+ fitMeasures(fit,c("chisq","df","pvalue","gfi","cfi","rmr","srmr","rmsea","aic","bic"))
+ 
+ summary(fit)  #模型简化将P值（大于0.05）最大的路径删除
+ summary(fit, fit.measures=TRUE)
+  fitMeasures(fit,c("chisq","df","pvalue","gfi","cfi","rmr","srmr","rmsea","aic","bic"))
+ #模型合适时获取标准参数
+ summary(fit, standardized = TRUE,rsq = T)
+ 
+df<-read.csv("all_sem.csv",header=T,row.names = 1)
+# 读取您的数据
+ # 标准化数据
+env_50<-df[df$depth=="50",]
+env_50[env_50 == "#N/A"] <- NA
+env_50_clean <- na.omit(env_50)
+env_50_clean$Multifunction<-as.numeric(env_50_clean$Multifunction)
+  
+  model2 <- '
+   Multifunction ~ relative.abundance2+clay+AN+pH+NDVI+richness4+MAT  
+  richness4 ~ NDVI+pH+AN+MAT
+  pcoa1_4 ~ pH+AN+clay+MAT
+  relative.abundance4 ~ pH+clay+MAT
+  richness2  ~ NDVI+pH+clay+MAT
+  pcoa1_2 ~ NDVI+pH+MAT
+  relative.abundance2 ~ NDVI+pH+AN+clay+MAT
+  NDVI ~ MAT+pH
+  clay ~ MAT
+  pH ~ MAT
+  AN ~ MAT
+  richness4 ~~ pcoa1_4+relative.abundance4
+  pcoa1_4 ~~ relative.abundance4
+  richness2 ~~ pcoa1_2+relative.abundance2
+   pcoa1_2 ~~ relative.abundance2
+  relative.abundance4 ~~ relative.abundance2
+   pcoa1_4 ~~             pcoa1_2
+   richness4 ~~           richness2
+   richness4 ~~             pcoa1_2
+   richness4 ~~ relative.abundance2 
+   clay ~~     pH
+   clay ~~    AN 
+   pcoa1_4 ~~ relative.abundance2
+   relative.abundance4 ~~           richness2+pcoa1_2 
+'
+ fit2 <- sem(model2, data = env_50_clean)
+ summary(fit2)
+ mod_indices2<-modindices(fit2)
+ mod_indices2[mod_indices2$mi > 3.841, ]
+ fitMeasures(fit2,c("chisq","df","pvalue","gfi","cfi","rmr","srmr","rmsea","aic","bic"))
+ 
+ summary(fit2, standardized = TRUE,rsq = T)
+
+ 
+  #50-100cm
+ 
+ df<-read.csv("all_sem.csv",header=T,row.names = 1)
+# 读取您的数据
+ # 标准化数据
+env_100<-df[df$depth=="100",]
+env_100[env_100 == "#N/A"] <- NA
+env_100_clean <- na.omit(env_100)
+env_100_clean$Multifunction<-as.numeric(env_100_clean$Multifunction)
+  model3 <- '
+  Multifunction ~ relative.abundance4+relative.abundance2+NDVI+clay+richness4+MAT
+  richness4 ~ NDVI+pH+clay+MAT
+  pcoa1_4 ~ pH+MAT
+  relative.abundance4 ~ pH+MAT
+  richness2  ~ NDVI+pH+clay+MAT
+  pcoa1_2 ~ pH+MAT
+  relative.abundance2 ~ NDVI+MAT
+  NDVI ~ MAT+pH
+  clay ~ MAT
+  pH ~ MAT
+  richness4 ~~ pcoa1_4+relative.abundance4
+  pcoa1_4 ~~ relative.abundance4
+  richness2 ~~ pcoa1_2+relative.abundance2
+   pcoa1_2 ~~ relative.abundance2
+   relative.abundance4 ~~relative.abundance2+richness2+pcoa1_2
+   richness4  ~~ relative.abundance2+richness2+pcoa1_2
+   pcoa1_4 ~~ relative.abundance2+richness2+pcoa1_2
+'
+  fit3 <- sem(model3, data = env_100_clean)
+ summary(fit3)
+ mod_indices3<-modindices(fit3)
+ mod_indices3[mod_indices3$mi > 3.841, ]
+ fitMeasures(fit3,c("chisq","df","pvalue","gfi","cfi","rmr","srmr","rmsea","aic","bic"))
+ summary(fit3, standardized = TRUE,rsq = T)
+
+ 
+ 
+pdf("sem_plot.pdf", family = "sans")
+
+# 使用 semPaths 绘制路径图
+semPaths(
+    fit2,
+    what = "std",
+    whatLabels = "std",
+    residuals = FALSE,
+    layout = manual_layout,  # 使用手动布局
+    fade = FALSE,
+    edge.color = "dodgerblue3",
+    edge.label.cex = 0.8,    # 调整边的标签大小 (变小)
+    label.cex = 1.5,         # 调整节点标签大小 (变小)
+    label.prop = 0.8,
+    edge.label.color = "black",
+    nCharNodes = 9,          # 节点标签的字符限制
+    shapeMan = "square",     # 节点形状
+    sizeMan = 3,             # 节点大小 (变小)
+    curve = 1,               # 路径弧度
+    rotation = 2,            # 从上到下
+    layoutSplit = FALSE      # 禁止自动布局拆分
+)
+
+# 关闭 PDF 设备以保存文件
+dev.off()
+```
+#4. residue relative abundance
+```{r}
+setwd("D:/Other-project/N/New_1439/1.1相对丰度")
+df<-read.csv("abundance_scale.csv",header=T,row.names = 1)
+result <- sub(".*[[:alpha:]]", "", row.names(df))
+all_2=df[result=="2",]
+cor_2<-cor(all_2)
+all_5=df[result=="5",]
+cor_5<-cor(all_5)
+cor_5
+all_10=df[result=="10",]
+cor_10<-cor(all_10)
+cor_10
+
+env<-read.csv("env_china_update_1439.csv",header=T,row.names = 1)
+df_env<-merge(df,env,by = "row.names")
+mode_Denitrification <- lm (Denitrification ~ All,data=df)
+res1<-data.frame(residuals(mode_Denitrification))
+
+mode_Dissimilatory_nitrate_reduction <- lm (Dissimilatory.nitrate.reduction ~ All,data=df)
+res2<-data.frame(residuals(mode_Dissimilatory_nitrate_reduction))
+
+mode_Nitrification <- lm (Nitrification ~ All,data=df)
+res3<-data.frame(residuals(mode_Nitrification))
+
+mode_Assimilatory_nitrate_reduction <- lm (Assimilatory.nitrate.reduction ~ All,data=df)
+res4<-data.frame(residuals(mode_Assimilatory_nitrate_reduction))
+
+mode_Organic_degradation_and_synthesis <- lm (Organic.degradation.and.synthes ~ All,data=df)
+res5<-data.frame(residuals(mode_Organic_degradation_and_synthesis))
+
+mode_Nitrogen_fixation <- lm (Nitrogen.fixation ~ All,data=df)
+res6<-data.frame(residuals(mode_Nitrogen_fixation))
+
+
+res_all<-  cbind(res1, res2, res3,res4,res5,res6)
+colnames(res_all) <- c("Denitrification","Dissimilatory_nitrate_reduction","Nitrification","Assimilatory_nitrate_reduction","Organic_degradation_and_synthesis","Nitrogen_fixation")
+write.csv(res_all,"res_all.csv")
+
+```
+#5. correlation
+```{r}
+library(linkET)
+library(ggtext)
+library(dplyr)
+library(cols4all)
+library(reshape2)
+library(ggplot2)
+
+##基因间相关分析
+setwd("D:/Other-project/N/New_1439/1.显著相关")
+df<-read.csv("D:/Other-project/N/New_1439/1.显著相关/all_scale_pathway.csv",header = T,row.names=1)
+evn <- df
+cplot=function(evn,size=1){
+  cor2 <- correlate(evn)
+  corr2 <- cor2 %>% as_md_tbl()
+  
+  for (i in 1:ncol(evn)) {
+    k=c((ncol(evn)*(i-1)+1):(ncol(evn)*(i-1)+i))
+    corr2[k,4]=1
+  }
+  
+  # 定义分类条件
+  threshold1 <- 0.0001
+  threshold2 <- 0.001
+  threshold3 <- 0.01
+  
+  # 使用ifelse()函数对元素进行分类
+  corr2$pa <- factor(ifelse(corr2$p < threshold1, "<0.0001",
+                           ifelse(corr2$p < threshold2, "<0.001",
+                                   ifelse(corr2$p < threshold3, "<0.01",">0.01"))), 
+                     levels = c("<0.0001", "<0.001", "<0.01", ">0.01"))
+  
+  
+  qcorrplot(cor2,
+            grid_col = "white",
+            grid_size = 0.2,
+            type = "lower",
+            diag = FALSE,
+            drop=T,
+            size=2,
+            facets_order =colnames(evn))+
+    ggtitle("Residual")+
+    geom_tile(colour = "white",linewidth=1.0) +
+    #geom_point(data=corr2,
+         #aes(shape=factor(pa,levels=c("<0.0001","<0.001","<0.01",">0.01"))),
+         #size=size)+
+    geom_mark(sep = '\n',size = 3.5, sig_level = c(0.01, 0.001, 0.0001),
+                   sig_thres = 0.05, color = 'grey0') +
+         
+         scale_fill_gradient2(low="#4DBBD5CC", high = "#E64B35CC",
+                              limits = c(-1, 1))+
+    scale_shape_manual(values = c("<0.0001" = 19, "<0.001" =20 , "<0.01" = 0, ">0.01" = NA))+
+    theme(legend.position = "right")+
+    labs(shape="p")
+}
+
+cor2 <- correlate(df)
+cor2
+cplot(df)
+
+result <- sub(".*[[:alpha:]]", "", row.names(df))
+df_2=df[result=="2",]
+cor2 <- correlate(df_2)
+cor2
+df_5=df[result=="5",]
+cor5 <- correlate(df_5)
+cor5
+df_10=df[result=="10",]
+cor10 <- correlate(df_10)
+cor10
+
+########分土层
+cplot(df_2)
+
+cplot(df_5)
+
+cplot(df_10)
+```
+
+## 6. Linear relationship
+```{r}
+library(ggplot2)
+library(ggpmisc)
+setwd("D:/Other-project/N/New_1439/11.多功能性")
+env <- read.csv("N_function_scale.csv",header = T)
+otu <- read.csv("richness_scale.csv",header = T,check.names =F)
+# same_name=intersect(x=row.names(env),y = row.names(otu))
+# env=env[same_name,]
+# 
+# otu=otu[same_name,]
+# #根据列名合并
+# df<-read.csv("N_env.csv",header=T,row.names = 1)
+# tem<-read.csv("N.csv",header = T,row.names = 1)
+df_func<-merge(otu,env,by = "ID",all=T)
+df_func<-na.omit(df_func)
+
+df_2<-df_func[df_func$depth=="2",]
+df_5<-df_func[df_func$depth=="5",]
+df_10<-df_func[df_func$depth=="10",]
+
+
+#mode_df5<- lm (math_ava_scale ~ avarage ,data=df_5)
+#summary(mode_df5)
+library(ggplot2)
+library(ggpmisc)
+
+p <- ggplot(df_10, aes(richness, Multifunction)) +
+  geom_point(color = "lightblue4", size = 2, alpha = 0.65) +
+  stat_smooth(color = "black", formula = y ~ x, fill = "lightblue3", method = "lm") +
+  stat_poly_eq(
+    aes(label = paste(..eq.label.., ..rr.label.., ..p.value.label.., sep = '~~~~')),
+    formula = y ~ x, parse = TRUE,
+    size = 5, label.x = 0.1, label.y = 1,
+    rr.digits = 3  # R² 保留三位小数
+  ) +
+  theme_bw() +
+  theme(
+    axis.text = element_text(colour = 'black', size = 9),
+    panel.grid.major = element_blank(),  # 移除主网格线
+    panel.grid.minor = element_blank()   # 移除次网格线
+  ) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y = "Multi-functionality at 50-100cm")  # 更改 y 轴标签
+
+print(p)
+```
+# 7.Violin plot
+```{r}
+library(ggplot2)
+library(dplyr)
+
+library(ggpubr)
+library(rstatix)
+setwd("D:/Other-project/N/New_1439/增温/last/abundance")
+df<-read.csv("all1-last.csv",header = T,row.names = 1)
+paths <- c("Denitrification", "Dissimilatory.nitrate.reduction", "Nitrification", 
+           "Assimilatory.nitrate.reduction", "Organic.degradation","Organic.synthesis", 
+           "Nitrogen.fixation")
+# df_0<-df[df$map=="0",]
+# df_1<-df[df$map=="1",]
+data<-df
+
+t_test_results <- data %>%
+  t_test(Organic.synthesis ~ mat, paired = FALSE) %>%
+  add_significance()
+t_test_results
+library(doBy)
+
+
+# --------------------------
+# 步骤2: 绘制小提琴图 + 配对线
+# --------------------------
+ggplot(a, aes(x = factor(mat), y = Nitrogen.fixation)) +  # 确保x转换为factor
+  # 小提琴图层（显示数据分布）
+  geom_violin(
+    aes(fill = factor(mat)),  # 填充颜色基于mat
+    width = 0.7, 
+    alpha = 0.5,
+    trim = FALSE
+  ) +
+  # 箱型图层（显示中位数、四分位数）
+  geom_boxplot(
+    width = 0.15,
+    outlier.shape = NA
+  ) +
+  # 添加配对连线（假设数据是成对样本）
+  geom_line(
+    aes(group = mat),  # 需替换为实际的配对样本ID列名
+    color = "gray40",
+    alpha = 0.6,
+    linetype = "dashed"
+  ) +
+  # 添加数据点
+  geom_jitter(
+    aes(color = factor(mat)),  # 颜色与填充一致
+    width = 0.1,
+    size = 2,
+    alpha = 0.8
+  ) +  
+  # 自定义颜色（匹配0/1编码）
+  scale_fill_manual(
+    values = c("0" = "goldenrod", "1" = "darkorange"),
+    labels = c("0" = "未处理", "1" = "处理")  # 可选：设置图例标签
+  ) +
+  scale_color_manual(
+    values = c("0" = "goldenrod", "1" = "darkorange"),
+    guide = "none"  # 隐藏颜色图例（与填充图例合并）
+  ) +
+  theme_bw() +
+  # 可选：优化图例位置和样式
+  theme(
+    legend.position = "right",
+    legend.title = element_text(face = "bold", size = 9),
+    legend.text = element_text(size = 8)
+  )
+```
+
+
+
